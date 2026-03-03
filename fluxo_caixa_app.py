@@ -42,6 +42,28 @@ MYSQL_CONFIG = {
     'database': os.getenv('MYSQL_DATABASE', 'newcore')
 }
 
+# Paleta de cores consistente
+CORES = {
+    'recebiveis': '#2ecc71',
+    'despesas': '#e74c3c',
+    'saldo': '#3498db',
+    'orcado': '#3498db',
+    'realizado': '#2ecc71',
+    'alerta': '#f39c12',
+    'neutro': '#95a5a6',
+}
+
+MESES_NOME = {1: 'Jan', 2: 'Fev', 3: 'Mar', 4: 'Abr', 5: 'Mai', 6: 'Jun',
+              7: 'Jul', 8: 'Ago', 9: 'Set', 10: 'Out', 11: 'Nov', 12: 'Dez'}
+
+PLOTLY_LAYOUT = dict(
+    template='plotly_dark',
+    paper_bgcolor='rgba(0,0,0,0)',
+    plot_bgcolor='rgba(0,0,0,0)',
+    font=dict(color='#fafafa'),
+    legend=dict(orientation='h', yanchor='bottom', y=1.02),
+)
+
 # ============================================
 # FUNÇÕES DE LEITURA
 # ============================================
@@ -244,79 +266,154 @@ def main():
     st.set_page_config(
         page_title="Fluxo de Caixa - Newcore",
         page_icon="💰",
-        layout="wide"
+        layout="wide",
+        initial_sidebar_state="expanded"
     )
-    
-    st.title("💰 Fluxo de Caixa")
-    st.caption(f"Atualizado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-    
-    # Botão de refresh
-    if st.button("🔄 Atualizar dados"):
-        st.cache_data.clear()
-        st.rerun()
-    
+
+    # CSS customizado
+    st.markdown("""
+    <style>
+        /* Cards de métricas */
+        div[data-testid="stMetric"] {
+            background: linear-gradient(135deg, #1a1f2e 0%, #141824 100%);
+            border: 1px solid #2a3040;
+            border-radius: 12px;
+            padding: 16px 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        div[data-testid="stMetric"] label {
+            font-size: 0.85rem !important;
+            color: #8892a4 !important;
+        }
+        div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
+            font-size: 1.6rem !important;
+        }
+        /* Subtítulos de seção */
+        h3 {
+            color: #3498db !important;
+            border-bottom: 2px solid #2a3040;
+            padding-bottom: 8px;
+        }
+        /* Sidebar */
+        section[data-testid="stSidebar"] {
+            background: #0a0e16;
+            border-right: 1px solid #1a1f2e;
+        }
+        /* Expanders */
+        div[data-testid="stExpander"] {
+            border: 1px solid #2a3040;
+            border-radius: 8px;
+        }
+        /* Separador mais sutil */
+        hr {
+            border-color: #1a1f2e !important;
+            margin: 1.5rem 0 !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # ==========================================
+    # SIDEBAR
+    # ==========================================
+
+    with st.sidebar:
+        st.markdown("### NEWCORE")
+        st.caption("Fluxo de Caixa")
+        st.markdown("---")
+
+        if st.button("Atualizar dados", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
+
     # Carrega dados
     with st.spinner("Carregando dados..."):
         df_despesas = load_despesas_from_gsheets()
         saldo_conta, data_saldo = load_saldo_from_gsheets()
         df_recebiveis = load_recebiveis_from_mysql()
-    
+
     hoje = pd.Timestamp.now().normalize()
 
     if df_despesas.empty:
-        st.warning("Não foi possível carregar as despesas. Verifique as configurações.")
+        st.warning("Nao foi possivel carregar as despesas. Verifique as configuracoes.")
         return
-    
+
+    # Sidebar: filtros e info
+    with st.sidebar:
+        st.markdown("---")
+        st.markdown("**Filtros**")
+
+        data_selecionada = st.date_input(
+            "Dia (detalhamento)",
+            value=hoje.date(),
+            min_value=hoje.date(),
+            max_value=(hoje + timedelta(days=29)).date()
+        )
+
+        anos_disponiveis = sorted(df_despesas['ANO_ORIGINAL'].dropna().unique(), reverse=True)
+        ano_selecionado = st.selectbox("Ano", anos_disponiveis, index=0) if anos_disponiveis else datetime.now().year
+
+        categorias_disponiveis = sorted(df_despesas['CATEGORIA CONSOLIDADA'].dropna().unique())
+        categorias_selecionadas = st.multiselect("Categorias", categorias_disponiveis, default=[])
+
+        st.markdown("---")
+        st.metric("Saldo em Conta", f"R$ {saldo_conta:,.2f}")
+        st.caption(f"Atualizado: {data_saldo}")
+
+    data_sel = pd.Timestamp(data_selecionada).normalize()
+
     # ==========================================
-    # LINHA 1: KPIs PRINCIPAIS
+    # KPIs PRINCIPAIS
     # ==========================================
-    
-    st.markdown("---")
-    
+
+    st.markdown(f"#### Fluxo de Caixa — {hoje.strftime('%d/%m/%Y')}")
+
     col1, col2, col3, col4 = st.columns(4)
-    
+
+    despesas_hoje = calcular_despesas_periodo(df_despesas, 0)
+    recebiveis_hoje = calcular_recebiveis_periodo(df_recebiveis, 0)
+    saldo_projetado = saldo_conta - despesas_hoje + recebiveis_hoje
+
     with col1:
         st.metric(
-            label="💵 Saldo em Conta",
+            label="Saldo em Conta",
             value=f"R$ {saldo_conta:,.2f}",
             help=f"Atualizado em: {data_saldo}"
         )
-    
-    despesas_hoje = calcular_despesas_periodo(df_despesas, 0)
+
     with col2:
         st.metric(
-            label="📤 Despesas Hoje",
-            value=f"R$ {despesas_hoje:,.2f}"
+            label="Despesas Hoje",
+            value=f"R$ {despesas_hoje:,.2f}",
+            delta=f"-R$ {despesas_hoje:,.2f}" if despesas_hoje > 0 else None,
+            delta_color="inverse"
         )
-    
-    recebiveis_hoje = calcular_recebiveis_periodo(df_recebiveis, 0)
+
     with col3:
         st.metric(
-            label="📥 Recebíveis Hoje",
-            value=f"R$ {recebiveis_hoje:,.2f}"
+            label="Recebiveis Hoje",
+            value=f"R$ {recebiveis_hoje:,.2f}",
+            delta=f"+R$ {recebiveis_hoje:,.2f}" if recebiveis_hoje > 0 else None,
+            delta_color="normal"
         )
-    
-    saldo_projetado = saldo_conta - despesas_hoje + recebiveis_hoje
+
     with col4:
-        delta_color = "normal" if saldo_projetado >= 0 else "inverse"
+        delta_val = recebiveis_hoje - despesas_hoje
         st.metric(
-            label="📊 Saldo Projetado (fim do dia)",
+            label="Saldo Projetado (fim do dia)",
             value=f"R$ {saldo_projetado:,.2f}",
-            delta=f"R$ {(recebiveis_hoje - despesas_hoje):,.2f}",
-            delta_color=delta_color
+            delta=f"R$ {delta_val:,.2f}",
+            delta_color="normal" if delta_val >= 0 else "inverse"
         )
-    
+
     # ==========================================
     # ALERTAS DE VENCIMENTO
     # ==========================================
 
-    # Despesas vencidas (data passou e ainda não foi paga/lançada)
     df_desp_vencidas = df_despesas[
         (df_despesas['DT_PREV_PGTO'] < hoje) &
         (df_despesas['STATUS Consolidado'].isin(['Previsto', 'Confirmado']))
     ].copy()
 
-    # Recebíveis vencidos (data passou e não foi pago)
     df_rec_vencidos = df_recebiveis[
         (df_recebiveis['data_vencimento'] < hoje) &
         (df_recebiveis['data_pagamento'].isna())
@@ -333,7 +430,7 @@ def main():
         if len(df_desp_vencidas) > 0:
             partes.append(f"{len(df_desp_vencidas)} despesas (R$ {valor_desp_vencidas:,.2f})")
         if len(df_rec_vencidos) > 0:
-            partes.append(f"{len(df_rec_vencidos)} recebíveis (R$ {valor_rec_vencidos:,.2f})")
+            partes.append(f"{len(df_rec_vencidos)} recebiveis (R$ {valor_rec_vencidos:,.2f})")
         msg += " | ".join(partes)
 
         if total_alertas >= 3:
@@ -363,7 +460,7 @@ def main():
                     st.info("Nenhuma despesa vencida.")
 
             with col_v2:
-                st.markdown("**Recebíveis vencidos**")
+                st.markdown("**Recebiveis vencidos**")
                 if not df_rec_vencidos.empty:
                     df_rec_vencidos['Dias em atraso'] = (hoje - df_rec_vencidos['data_vencimento']).dt.days
                     df_show_r = df_rec_vencidos[['data_vencimento', 'oferta_id', 'valor', 'status', 'Dias em atraso']].sort_values('Dias em atraso', ascending=False)
@@ -378,87 +475,87 @@ def main():
                         hide_index=True
                     )
                 else:
-                    st.info("Nenhum recebível vencido.")
+                    st.info("Nenhum recebivel vencido.")
 
     # ==========================================
-    # LINHA 2: PROJEÇÃO DE PERÍODOS
+    # PROJECAO POR PERIODO
     # ==========================================
 
     st.markdown("---")
-    st.subheader("📅 Projeção por Período")
-    
+    st.subheader("Projecao por Periodo")
+
     col1, col2, col3 = st.columns(3)
-    
-    periodos = [7, 15, 30]
-    
-    for col, dias in zip([col1, col2, col3], periodos):
+
+    for col, dias in zip([col1, col2, col3], [7, 15, 30]):
         with col:
             desp = calcular_despesas_periodo(df_despesas, dias)
             receb = calcular_recebiveis_periodo(df_recebiveis, dias)
             saldo = receb - desp
-            
-            st.markdown(f"**Próximos {dias} dias**")
-            st.write(f"Despesas: R$ {desp:,.2f}")
-            st.write(f"Recebíveis: R$ {receb:,.2f}")
-            
-            cor = "green" if saldo >= 0 else "red"
-            st.markdown(f"Saldo: <span style='color:{cor}'>**R$ {saldo:,.2f}**</span>", 
-                       unsafe_allow_html=True)
-    
+
+            st.metric(
+                label=f"Proximos {dias} dias",
+                value=f"R$ {saldo:,.2f}",
+                delta=f"Desp: R$ {desp:,.2f} | Rec: R$ {receb:,.2f}",
+                delta_color="off"
+            )
+
     # ==========================================
-    # LINHA 3: GRÁFICO DE FLUXO DIÁRIO
+    # GRAFICO DE FLUXO DIARIO
     # ==========================================
-    
+
     st.markdown("---")
-    st.subheader("📈 Fluxo de Caixa Diário (30 dias)")
-    
+    st.subheader("Fluxo de Caixa Diario (30 dias)")
+
     df_fluxo = gerar_fluxo_diario(df_despesas, df_recebiveis, 30)
-    
-    # Calcula saldo acumulado
     df_fluxo['Saldo Acumulado'] = saldo_conta + df_fluxo['Saldo Dia'].cumsum()
-    
+
+    hover_brl = "R$ %{y:,.2f}<extra></extra>"
+
     fig = go.Figure()
-    
+
     fig.add_trace(go.Bar(
         x=df_fluxo['Data'],
         y=df_fluxo['Recebíveis'],
-        name='Recebíveis',
-        marker_color='#2ecc71'
+        name='Recebiveis',
+        marker_color=CORES['recebiveis'],
+        hovertemplate="Recebiveis: R$ %{y:,.2f}<extra></extra>"
     ))
-    
+
     fig.add_trace(go.Bar(
         x=df_fluxo['Data'],
         y=-df_fluxo['Despesas'],
         name='Despesas',
-        marker_color='#e74c3c'
+        marker_color=CORES['despesas'],
+        hovertemplate="Despesas: R$ %{y:,.2f}<extra></extra>"
     ))
-    
+
     fig.add_trace(go.Scatter(
         x=df_fluxo['Data'],
         y=df_fluxo['Saldo Acumulado'],
         name='Saldo Acumulado',
-        line=dict(color='#3498db', width=3),
-        yaxis='y2'
+        line=dict(color=CORES['saldo'], width=3),
+        yaxis='y2',
+        hovertemplate="Saldo: R$ %{y:,.2f}<extra></extra>"
     ))
-    
+
     fig.update_layout(
+        **PLOTLY_LAYOUT,
         barmode='relative',
-        yaxis=dict(title='Movimentação (R$)'),
-        yaxis2=dict(title='Saldo Acumulado (R$)', overlaying='y', side='right'),
-        legend=dict(orientation='h', yanchor='bottom', y=1.02),
-        height=400
+        yaxis=dict(title='Movimentacao (R$)', gridcolor='#1a1f2e'),
+        yaxis2=dict(title='Saldo Acumulado (R$)', overlaying='y', side='right', gridcolor='#1a1f2e'),
+        height=420,
     )
-    
+
     st.plotly_chart(fig, use_container_width=True)
 
     # ==========================================
-    # LINHA 3.5: DETALHAMENTO DIÁRIO
+    # DETALHAMENTO DIARIO
     # ==========================================
 
     st.markdown("---")
-    st.subheader("🔍 Detalhamento Diário")
+    st.subheader(f"Detalhamento — {data_sel.strftime('%d/%m/%Y')}")
 
-    # Tabela consolidada (próximos 30 dias)
+    # Tabela consolidada
     df_resumo = df_fluxo[['Data', 'Despesas', 'Recebíveis', 'Saldo Dia']].copy()
 
     st.dataframe(
@@ -466,7 +563,7 @@ def main():
         column_config={
             'Data': st.column_config.DateColumn('Data', format='DD/MM/YYYY'),
             'Despesas': st.column_config.NumberColumn('Despesas', format='R$ %.2f'),
-            'Recebíveis': st.column_config.NumberColumn('Recebíveis', format='R$ %.2f'),
+            'Recebíveis': st.column_config.NumberColumn('Recebiveis', format='R$ %.2f'),
             'Saldo Dia': st.column_config.NumberColumn('Saldo Dia', format='R$ %.2f'),
         },
         use_container_width=True,
@@ -474,16 +571,7 @@ def main():
         height=350
     )
 
-    # Seletor de data
-    data_selecionada = st.date_input(
-        "Selecione o dia para ver detalhes",
-        value=hoje.date(),
-        min_value=hoje.date(),
-        max_value=(hoje + timedelta(days=29)).date()
-    )
-    data_sel = pd.Timestamp(data_selecionada).normalize()
-
-    # Resumo do dia selecionado
+    # KPIs do dia selecionado
     desp_dia_total = df_despesas[
         (df_despesas['DT_PREV_PGTO'] == data_sel) &
         (df_despesas['STATUS Consolidado'].isin(['Previsto', 'Confirmado']))
@@ -496,18 +584,18 @@ def main():
 
     col_res1, col_res2, col_res3 = st.columns(3)
     with col_res1:
-        st.metric("📤 Despesas", f"R$ {desp_dia_total:,.2f}")
+        st.metric("Despesas", f"R$ {desp_dia_total:,.2f}")
     with col_res2:
-        st.metric("📥 Recebíveis", f"R$ {receb_dia_total:,.2f}")
+        st.metric("Recebiveis", f"R$ {receb_dia_total:,.2f}")
     with col_res3:
         saldo_dia_sel = receb_dia_total - desp_dia_total
-        st.metric("💰 Saldo", f"R$ {saldo_dia_sel:,.2f}")
+        st.metric("Saldo", f"R$ {saldo_dia_sel:,.2f}")
 
-    # Tabelas de detalhe lado a lado
+    # Tabelas de detalhe
     col_desp, col_rec = st.columns(2)
 
     with col_desp:
-        st.markdown("**📤 Despesas do dia**")
+        st.markdown("**Despesas do dia**")
         df_desp_dia = df_despesas[
             (df_despesas['DT_PREV_PGTO'] == data_sel) &
             (df_despesas['STATUS Consolidado'].isin(['Previsto', 'Confirmado']))
@@ -527,7 +615,7 @@ def main():
             st.info("Nenhuma despesa prevista para esta data.")
 
     with col_rec:
-        st.markdown("**📥 Recebíveis do dia**")
+        st.markdown("**Recebiveis do dia**")
         df_rec_dia = df_recebiveis[
             (df_recebiveis['data_vencimento'] == data_sel) &
             (df_recebiveis['data_pagamento'].isna())
@@ -544,143 +632,136 @@ def main():
                 hide_index=True
             )
         else:
-            st.info("Nenhum recebível pendente para esta data.")
+            st.info("Nenhum recebivel pendente para esta data.")
 
     # ==========================================
-    # LINHA 4: DESPESAS POR CATEGORIA
+    # DESPESAS POR CATEGORIA + PROXIMOS VENCIMENTOS
     # ==========================================
-    
+
     st.markdown("---")
-    
+
     col1, col2 = st.columns(2)
-    
+
     with col1:
-        st.subheader("🏷️ Despesas Previstas por Categoria")
+        st.subheader("Despesas por Categoria")
 
         fim_mes = hoje + timedelta(days=30)
-        
+
         df_cat = df_despesas[
             (df_despesas['DT_PREV_PGTO'] >= hoje) &
             (df_despesas['DT_PREV_PGTO'] <= fim_mes) &
             (df_despesas['STATUS Consolidado'].isin(['Previsto', 'Confirmado']))
         ].groupby('CATEGORIA CONSOLIDADA')['VALOR'].sum().sort_values(ascending=False)
-        
+
         if not df_cat.empty:
             fig_cat = px.pie(
                 values=df_cat.values,
                 names=df_cat.index,
                 hole=0.4
             )
-            fig_cat.update_layout(height=350)
+            fig_cat.update_traces(textinfo='percent+label')
+            fig_cat.update_layout(**PLOTLY_LAYOUT, height=380, showlegend=False)
             st.plotly_chart(fig_cat, use_container_width=True)
         else:
-            st.info("Nenhuma despesa prevista para os próximos 30 dias.")
-    
+            st.info("Nenhuma despesa prevista para os proximos 30 dias.")
+
     with col2:
-        st.subheader("📋 Próximos Vencimentos")
-        
+        st.subheader("Proximos Vencimentos")
+
         df_proximos = df_despesas[
             (df_despesas['DT_PREV_PGTO'] >= hoje) &
             (df_despesas['DT_PREV_PGTO'] <= hoje + timedelta(days=7)) &
             (df_despesas['STATUS Consolidado'].isin(['Previsto', 'Confirmado']))
         ][['DT_PREV_PGTO', 'FORNECEDOR', 'CATEGORIA CONSOLIDADA', 'VALOR']].sort_values('DT_PREV_PGTO')
-        
+
         if not df_proximos.empty:
-            df_proximos['DT_PREV_PGTO'] = df_proximos['DT_PREV_PGTO'].dt.strftime('%d/%m')
-            df_proximos['VALOR'] = df_proximos['VALOR'].apply(lambda x: f"R$ {x:,.2f}")
             df_proximos.columns = ['Data', 'Fornecedor', 'Categoria', 'Valor']
-            st.dataframe(df_proximos, use_container_width=True, hide_index=True)
+            st.dataframe(
+                df_proximos,
+                column_config={
+                    'Data': st.column_config.DateColumn('Data', format='DD/MM'),
+                    'Valor': st.column_config.NumberColumn('Valor', format='R$ %.2f'),
+                },
+                use_container_width=True,
+                hide_index=True
+            )
         else:
-            st.info("Nenhum vencimento nos próximos 7 dias.")
-    
+            st.info("Nenhum vencimento nos proximos 7 dias.")
+
     # ==========================================
-    # LINHA 5: ORÇADO VS REALIZADO
+    # ORCADO VS REALIZADO
     # ==========================================
 
     st.markdown("---")
-
-    meses_nome = {1: 'Jan', 2: 'Fev', 3: 'Mar', 4: 'Abr', 5: 'Mai', 6: 'Jun',
-                  7: 'Jul', 8: 'Ago', 9: 'Set', 10: 'Out', 11: 'Nov', 12: 'Dez'}
-
-    col_filtro1, col_filtro2 = st.columns([1, 3])
-    with col_filtro1:
-        anos_disponiveis = sorted(df_despesas['ANO_ORIGINAL'].dropna().unique(), reverse=True)
-        ano_selecionado = st.selectbox("Ano", anos_disponiveis, index=0) if anos_disponiveis else datetime.now().year
-    with col_filtro2:
-        categorias_disponiveis = sorted(df_despesas['CATEGORIA CONSOLIDADA'].dropna().unique())
-        categorias_selecionadas = st.multiselect("Filtrar categorias", categorias_disponiveis, default=[])
-
-    st.subheader(f"📊 Orçado vs Realizado ({ano_selecionado})")
+    st.subheader(f"Orcado vs Realizado ({ano_selecionado})")
 
     df_ano = df_despesas[df_despesas['ANO_ORIGINAL'] == ano_selecionado].copy()
     if categorias_selecionadas:
         df_ano = df_ano[df_ano['CATEGORIA CONSOLIDADA'].isin(categorias_selecionadas)]
 
-    # Orçado: Previsto + Confirmado
     df_orcado = df_ano[
         df_ano['STATUS Consolidado'].isin(['Previsto', 'Confirmado'])
     ].groupby('MES_ORIGINAL')['VALOR'].sum().reset_index()
-    df_orcado.columns = ['Mês', 'Orçado']
+    df_orcado.columns = ['Mes', 'Orcado']
 
-    # Realizado: Lançado
     df_realizado = df_ano[
         df_ano['STATUS Consolidado'] == 'Lançado'
     ].groupby('MES_ORIGINAL')['VALOR'].sum().reset_index()
-    df_realizado.columns = ['Mês', 'Realizado']
+    df_realizado.columns = ['Mes', 'Realizado']
 
-    # Merge
-    df_comparativo = pd.DataFrame({'Mês': range(1, 13)})
-    df_comparativo = df_comparativo.merge(df_orcado, on='Mês', how='left').merge(df_realizado, on='Mês', how='left')
+    df_comparativo = pd.DataFrame({'Mes': range(1, 13)})
+    df_comparativo = df_comparativo.merge(df_orcado, on='Mes', how='left').merge(df_realizado, on='Mes', how='left')
     df_comparativo = df_comparativo.fillna(0)
-    df_comparativo['Mês Nome'] = df_comparativo['Mês'].map(meses_nome)
-    df_comparativo['Diferença'] = df_comparativo['Realizado'] - df_comparativo['Orçado']
+    df_comparativo['Mes Nome'] = df_comparativo['Mes'].map(MESES_NOME)
+    df_comparativo['Diferenca'] = df_comparativo['Realizado'] - df_comparativo['Orcado']
 
-    # Gráfico barras agrupadas
     fig_comp = go.Figure()
     fig_comp.add_trace(go.Bar(
-        x=df_comparativo['Mês Nome'],
-        y=df_comparativo['Orçado'],
-        name='Orçado (Previsto)',
-        marker_color='#3498db',
-        text=df_comparativo['Orçado'].apply(lambda x: f"R$ {x:,.0f}" if x > 0 else ""),
-        textposition='outside'
+        x=df_comparativo['Mes Nome'],
+        y=df_comparativo['Orcado'],
+        name='Orcado (Previsto)',
+        marker_color=CORES['orcado'],
+        text=df_comparativo['Orcado'].apply(lambda x: f"R$ {x:,.0f}" if x > 0 else ""),
+        textposition='outside',
+        hovertemplate="Orcado: R$ %{y:,.2f}<extra></extra>"
     ))
     fig_comp.add_trace(go.Bar(
-        x=df_comparativo['Mês Nome'],
+        x=df_comparativo['Mes Nome'],
         y=df_comparativo['Realizado'],
-        name='Realizado (Lançado)',
-        marker_color='#2ecc71',
+        name='Realizado (Lancado)',
+        marker_color=CORES['realizado'],
         text=df_comparativo['Realizado'].apply(lambda x: f"R$ {x:,.0f}" if x > 0 else ""),
-        textposition='outside'
+        textposition='outside',
+        hovertemplate="Realizado: R$ %{y:,.2f}<extra></extra>"
     ))
-    fig_comp.update_layout(barmode='group', height=350, legend=dict(orientation='h', yanchor='bottom', y=1.02))
+    fig_comp.update_layout(**PLOTLY_LAYOUT, barmode='group', height=380)
     st.plotly_chart(fig_comp, use_container_width=True)
 
     # Tabela resumo
-    df_tabela = df_comparativo[df_comparativo[['Orçado', 'Realizado']].sum(axis=1) > 0].copy()
+    df_tabela = df_comparativo[df_comparativo[['Orcado', 'Realizado']].sum(axis=1) > 0].copy()
     if not df_tabela.empty:
         df_tabela['% Desvio'] = df_tabela.apply(
-            lambda r: (r['Diferença'] / r['Orçado'] * 100) if r['Orçado'] > 0 else 0, axis=1
+            lambda r: (r['Diferenca'] / r['Orcado'] * 100) if r['Orcado'] > 0 else 0, axis=1
         )
         st.dataframe(
-            df_tabela[['Mês Nome', 'Orçado', 'Realizado', 'Diferença', '% Desvio']],
+            df_tabela[['Mes Nome', 'Orcado', 'Realizado', 'Diferenca', '% Desvio']],
             column_config={
-                'Mês Nome': st.column_config.TextColumn('Mês'),
-                'Orçado': st.column_config.NumberColumn('Orçado', format='R$ %.2f'),
+                'Mes Nome': st.column_config.TextColumn('Mes'),
+                'Orcado': st.column_config.NumberColumn('Orcado', format='R$ %.2f'),
                 'Realizado': st.column_config.NumberColumn('Realizado', format='R$ %.2f'),
-                'Diferença': st.column_config.NumberColumn('Diferença', format='R$ %.2f'),
+                'Diferenca': st.column_config.NumberColumn('Diferenca', format='R$ %.2f'),
                 '% Desvio': st.column_config.NumberColumn('% Desvio', format='%.1f%%'),
             },
             use_container_width=True,
             hide_index=True
         )
-    
+
     # ==========================================
-    # RODAPÉ
+    # RODAPE
     # ==========================================
-    
+
     st.markdown("---")
-    st.caption("Dashboard Fluxo de Caixa - Newcore | Dados: Google Sheets + MySQL")
+    st.caption(f"Dashboard Fluxo de Caixa — Newcore | {datetime.now().strftime('%d/%m/%Y %H:%M')}")
 
 
 if __name__ == "__main__":
