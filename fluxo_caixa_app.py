@@ -30,16 +30,16 @@ load_dotenv()
 # ============================================
 
 # Google Sheets
-GOOGLE_SHEET_ID = os.getenv('GOOGLE_SHEET_ID') or st.secrets.get('gsheets', {}).get('sheet_id')
+GOOGLE_SHEET_ID = os.getenv('GOOGLE_SHEET_ID') or st.secrets.get('GOOGLE_SHEET_ID')
 CREDENTIALS_PATH = os.getenv('GOOGLE_CREDENTIALS_PATH', 'credentials.json')
 
 # MySQL (somente leitura)
 MYSQL_CONFIG = {
-    'host': os.getenv('MYSQL_HOST') or st.secrets.get('mysql', {}).get('host'),
-    'port': int(os.getenv('MYSQL_PORT', 3306)),
-    'user': os.getenv('MYSQL_USER') or st.secrets.get('mysql', {}).get('user'),
-    'password': os.getenv('MYSQL_PASSWORD') or st.secrets.get('mysql', {}).get('password'),
-    'database': os.getenv('MYSQL_DATABASE', 'newcore')
+    'host': os.getenv('MYSQL_HOST') or st.secrets.get('MYSQL_HOST'),
+    'port': int(os.getenv('MYSQL_PORT') or st.secrets.get('MYSQL_PORT', 3306)),
+    'user': os.getenv('MYSQL_USER') or st.secrets.get('MYSQL_USER'),
+    'password': os.getenv('MYSQL_PASSWORD') or st.secrets.get('MYSQL_PASSWORD'),
+    'database': os.getenv('MYSQL_DATABASE') or st.secrets.get('MYSQL_DATABASE', 'newcore')
 }
 
 # Paleta de cores consistente
@@ -79,7 +79,7 @@ def _get_gsheets_client():
         creds = Credentials.from_service_account_file(CREDENTIALS_PATH, scopes=scopes)
     else:
         creds = Credentials.from_service_account_info(
-            dict(st.secrets['gcp_service_account']), scopes=scopes
+            dict(st.secrets['google_credentials']), scopes=scopes
         )
     return gspread.authorize(creds)
 
