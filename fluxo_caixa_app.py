@@ -350,8 +350,8 @@ def main():
     # CSS customizado
     st.markdown("""
     <style>
-        /* Texto global branco */
-        .stApp, .stApp p, .stApp span, .stApp label, .stApp div {
+        /* Texto global branco (exceto inputs e alertas) */
+        .stApp p, .stApp span, .stApp label {
             color: #fafafa;
         }
         /* Cards de métricas */
@@ -370,8 +370,9 @@ def main():
             font-size: 1.6rem !important;
             color: #ffffff !important;
         }
+        /* Deltas das métricas — preservar cor nativa verde/vermelho */
         div[data-testid="stMetric"] div[data-testid="stMetricDelta"] {
-            color: #cccccc !important;
+            opacity: 1 !important;
         }
         /* Subtítulos de seção */
         h3 {
@@ -382,20 +383,51 @@ def main():
         h4, h5, h6 {
             color: #fafafa !important;
         }
-        /* Sidebar */
+        /* Sidebar — fundo e textos */
         section[data-testid="stSidebar"] {
             background: #0a0e16;
             border-right: 1px solid #1a1f2e;
         }
-        section[data-testid="stSidebar"] * {
-            color: #fafafa !important;
-        }
         section[data-testid="stSidebar"] .stMarkdown p,
         section[data-testid="stSidebar"] .stMarkdown span,
+        section[data-testid="stSidebar"] .stMarkdown strong,
         section[data-testid="stSidebar"] label,
         section[data-testid="stSidebar"] .stCaption,
-        section[data-testid="stSidebar"] small {
+        section[data-testid="stSidebar"] small,
+        section[data-testid="stSidebar"] h1,
+        section[data-testid="stSidebar"] h2,
+        section[data-testid="stSidebar"] h3 {
             color: #fafafa !important;
+        }
+        /* Sidebar — botão com texto branco */
+        section[data-testid="stSidebar"] button,
+        section[data-testid="stSidebar"] button span,
+        section[data-testid="stSidebar"] button p {
+            color: #fafafa !important;
+        }
+        /* Sidebar — inputs com texto escuro (fundo branco) */
+        section[data-testid="stSidebar"] input,
+        section[data-testid="stSidebar"] select,
+        section[data-testid="stSidebar"] [data-baseweb="select"] *,
+        section[data-testid="stSidebar"] [data-baseweb="input"] input,
+        section[data-testid="stSidebar"] .stDateInput input,
+        section[data-testid="stSidebar"] .stSelectbox div[data-baseweb] *,
+        section[data-testid="stSidebar"] .stMultiSelect div[data-baseweb] * {
+            color: #1a1a2e !important;
+        }
+        /* Sidebar — placeholders legíveis */
+        section[data-testid="stSidebar"] input::placeholder {
+            color: #666666 !important;
+            opacity: 1 !important;
+        }
+        /* Sidebar — métricas mantêm branco */
+        section[data-testid="stSidebar"] div[data-testid="stMetric"] *,
+        section[data-testid="stSidebar"] div[data-testid="stMetricValue"],
+        section[data-testid="stSidebar"] div[data-testid="stMetricDelta"] {
+            color: #ffffff !important;
+        }
+        section[data-testid="stSidebar"] div[data-testid="stMetric"] label {
+            color: #e74c3c !important;
         }
         /* Expanders */
         div[data-testid="stExpander"] {
@@ -420,8 +452,11 @@ def main():
             border-color: #1a1f2e !important;
             margin: 1.5rem 0 !important;
         }
-        /* Info/Warning/Error boxes */
-        div[data-testid="stAlert"] p {
+        /* Alertas — preservar cores nativas (não sobrescrever) */
+        div[data-testid="stAlert"],
+        div[data-testid="stAlert"] p,
+        div[data-testid="stAlert"] span,
+        div[data-testid="stAlert"] strong {
             color: inherit !important;
         }
     </style>
