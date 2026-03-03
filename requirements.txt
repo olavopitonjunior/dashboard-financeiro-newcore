@@ -1,0 +1,7 @@
+streamlit>=1.28.0
+pandas>=2.0.0
+gspread>=5.10.0
+google-auth>=2.22.0
+mysql-connector-python>=8.1.0
+plotly>=5.17.0
+python-dotenv>=1.0.0
