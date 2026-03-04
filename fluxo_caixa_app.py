@@ -119,6 +119,9 @@ def load_despesas_from_gsheets():
         if 'STATUS Consolidado' in df.columns:
             df['STATUS Consolidado'] = df['STATUS Consolidado'].str.strip().str.capitalize()
 
+        # Remove Write off (cancelados)
+        df = df[df['STATUS Consolidado'] != 'Write off']
+
         # Converte ANO/MES para numérico
         for col in ['ANO_ORIGINAL', 'MES_ORIGINAL']:
             if col in df.columns:
@@ -285,7 +288,7 @@ def calcular_despesas_periodo(df, dias):
     mask = (
         (df['DT_PREV_PGTO'] >= hoje) & 
         (df['DT_PREV_PGTO'] <= fim) &
-        (df['STATUS Consolidado'].isin(['Previsto', 'Confirmado']))
+        (df['STATUS Consolidado'].isin(['Previsto', 'Lançado']))
     )
     
     return df[mask]['VALOR'].sum()
@@ -316,7 +319,7 @@ def gerar_fluxo_diario(df_despesas, df_recebiveis, dias=30):
         # Despesas do dia
         desp = df_despesas[
             (df_despesas['DT_PREV_PGTO'] == data) &
-            (df_despesas['STATUS Consolidado'].isin(['Previsto', 'Confirmado']))
+            (df_despesas['STATUS Consolidado'].isin(['Previsto', 'Lançado']))
         ]['VALOR'].sum()
         
         # Recebíveis do dia
@@ -561,7 +564,7 @@ def main():
 
     df_desp_vencidas = df_despesas[
         (df_despesas['DT_PREV_PGTO'] < hoje) &
-        (df_despesas['STATUS Consolidado'].isin(['Previsto', 'Confirmado']))
+        (df_despesas['STATUS Consolidado'] == 'Lançado')
     ].copy()
 
     df_rec_vencidos = df_recebiveis[
@@ -725,7 +728,7 @@ def main():
     # KPIs do dia selecionado
     desp_dia_total = df_despesas[
         (df_despesas['DT_PREV_PGTO'] == data_sel) &
-        (df_despesas['STATUS Consolidado'].isin(['Previsto', 'Confirmado']))
+        (df_despesas['STATUS Consolidado'].isin(['Previsto', 'Lançado']))
     ]['VALOR'].sum()
 
     receb_dia_total = df_recebiveis[
@@ -749,7 +752,7 @@ def main():
         st.markdown("**Despesas do dia**")
         df_desp_dia = df_despesas[
             (df_despesas['DT_PREV_PGTO'] == data_sel) &
-            (df_despesas['STATUS Consolidado'].isin(['Previsto', 'Confirmado']))
+            (df_despesas['STATUS Consolidado'].isin(['Previsto', 'Lançado']))
         ][['FORNECEDOR', 'CATEGORIA CONSOLIDADA', 'VALOR', 'STATUS Consolidado']].sort_values('VALOR', ascending=False)
 
         if not df_desp_dia.empty:
@@ -801,7 +804,7 @@ def main():
         df_cat = df_despesas[
             (df_despesas['DT_PREV_PGTO'] >= hoje) &
             (df_despesas['DT_PREV_PGTO'] <= fim_mes) &
-            (df_despesas['STATUS Consolidado'].isin(['Previsto', 'Confirmado']))
+            (df_despesas['STATUS Consolidado'].isin(['Previsto', 'Lançado']))
         ].groupby('CATEGORIA CONSOLIDADA')['VALOR'].sum().sort_values(ascending=False)
 
         if not df_cat.empty:
@@ -822,7 +825,7 @@ def main():
         df_proximos = df_despesas[
             (df_despesas['DT_PREV_PGTO'] >= hoje) &
             (df_despesas['DT_PREV_PGTO'] <= hoje + timedelta(days=7)) &
-            (df_despesas['STATUS Consolidado'].isin(['Previsto', 'Confirmado']))
+            (df_despesas['STATUS Consolidado'].isin(['Previsto', 'Lançado']))
         ][['DT_PREV_PGTO', 'FORNECEDOR', 'CATEGORIA CONSOLIDADA', 'VALOR']].sort_values('DT_PREV_PGTO')
 
         if not df_proximos.empty:
@@ -851,12 +854,12 @@ def main():
         df_ano = df_ano[df_ano['CATEGORIA CONSOLIDADA'].isin(categorias_selecionadas)]
 
     df_orcado = df_ano[
-        df_ano['STATUS Consolidado'].isin(['Previsto', 'Confirmado'])
+        df_ano['STATUS Consolidado'].isin(['Previsto', 'Lançado'])
     ].groupby('MES_ORIGINAL')['VALOR'].sum().reset_index()
     df_orcado.columns = ['Mês', 'Orçado']
 
     df_realizado = df_ano[
-        df_ano['STATUS Consolidado'] == 'Lançado'
+        df_ano['STATUS Consolidado'] == 'Confirmado'
     ].groupby('MES_ORIGINAL')['VALOR'].sum().reset_index()
     df_realizado.columns = ['Mês', 'Realizado']
 
@@ -870,7 +873,7 @@ def main():
     fig_comp.add_trace(go.Bar(
         x=df_comparativo['Mês Nome'],
         y=df_comparativo['Orçado'],
-        name='Orçado (Previsto)',
+        name='Orçado (Previsto + Lançado)',
         marker_color=CORES['orcado'],
         text=df_comparativo['Orçado'].apply(lambda x: f"R$ {x:,.0f}" if x > 0 else ""),
         textposition='outside',
@@ -879,7 +882,7 @@ def main():
     fig_comp.add_trace(go.Bar(
         x=df_comparativo['Mês Nome'],
         y=df_comparativo['Realizado'],
-        name='Realizado (Lançado)',
+        name='Realizado (Confirmado)',
         marker_color=CORES['realizado'],
         text=df_comparativo['Realizado'].apply(lambda x: f"R$ {x:,.0f}" if x > 0 else ""),
         textposition='outside',
