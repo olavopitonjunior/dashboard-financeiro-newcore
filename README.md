@@ -121,7 +121,7 @@ token_uri = "https://oauth2.googleapis.com/token"
 | FORNECEDOR | Nome do fornecedor |
 | CATEGORIA CONSOLIDADA | Categoria da despesa |
 | VALOR | Valor em R$ |
-| STATUS Consolidado | Lançado, Previsto, Confirmado |
+| STATUS Consolidado | Previsto (pendente), Lançado (pendente), Confirmado (pago), Write off (excluído) |
 | ANO_ORIGINAL | Ano |
 | MES_ORIGINAL | Mês |
 

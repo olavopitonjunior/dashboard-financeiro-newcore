@@ -16,7 +16,7 @@ Criar um dashboard de fluxo de caixa em tempo real que consolide despesas (Googl
 | KPI | Fonte | Cálculo |
 |-----|-------|---------|
 | Saldo em Conta | Sheets (Din DESPESAS, C10) | Valor direto |
-| Despesas Hoje | Sheets (DESPESAS) | SUM(VALOR) WHERE DT_PREV_PGTO = hoje AND STATUS IN (Previsto, Confirmado) |
+| Despesas Hoje | Sheets (DESPESAS) | SUM(VALOR) WHERE DT_PREV_PGTO = hoje AND STATUS IN (Previsto, Lançado) |
 | Recebíveis Hoje | MySQL (homeofferscharges) | SUM(Value) WHERE DATE(ExpiresAt) = hoje AND PaidAt IS NULL |
 | Saldo Projetado | Calculado | Saldo + Recebíveis - Despesas |
 
@@ -37,20 +37,20 @@ Mostrar para 7, 15 e 30 dias:
 ### 3.4 Despesas por Categoria
 
 - **Tipo:** Pizza/Donut
-- **Filtro:** Próximos 30 dias, STATUS IN (Previsto, Confirmado)
+- **Filtro:** Próximos 30 dias, STATUS IN (Previsto, Lançado)
 - **Agrupamento:** CATEGORIA CONSOLIDADA
 
 ### 3.5 Próximos Vencimentos
 
 - **Tipo:** Tabela
-- **Filtro:** Próximos 7 dias, STATUS IN (Previsto, Confirmado)
+- **Filtro:** Próximos 7 dias, STATUS IN (Previsto, Lançado)
 - **Colunas:** Data | Fornecedor | Categoria | Valor
 - **Ordenação:** Data ASC
 
 ### 3.6 Realizado Mensal
 
 - **Tipo:** Barras verticais
-- **Filtro:** ANO_ORIGINAL = 2025, STATUS = Lançado
+- **Filtro:** ANO_ORIGINAL = ano selecionado, STATUS = Confirmado
 - **Agrupamento:** MES_ORIGINAL
 - **Valores:** SUM(VALOR)
 
@@ -71,7 +71,8 @@ Mostrar para 7, 15 e 30 dias:
 │  Google Sheets  │     │     MySQL       │
 │                 │     │    (newcore)    │
 │  - DESPESAS     │     │                 │
-│  - Din DESPESAS │     │ homeofferscharges│
+│  - Din DESPESAS │     │ homeoffers +     │
+│ homeofferscharges│
 └────────┬────────┘     └────────┬────────┘
          │                       │
          │  gspread              │  mysql-connector
@@ -111,7 +112,7 @@ Mostrar para 7, 15 e 30 dias:
     'DEPTO': str,
     'VALOR': float64,
     'RECORRÊNCIA': str,
-    'STATUS Consolidado': str,  # Lançado | Previsto | Confirmado | Write off
+    'STATUS Consolidado': str,  # Previsto (pendente) | Lançado (pendente) | Confirmado (pago) | Write off (excluído)
     'OBSERVAÇÕES': str,
     'LISTA SRK': str,
     'RESPONSÁVEL': str,

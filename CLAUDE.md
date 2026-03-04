@@ -11,7 +11,7 @@ Dashboard de fluxo de caixa em tempo real para a Newcore (imobiliária digital b
 - **Dados:** Pandas
 - **Fontes:**
   - Google Sheets (despesas + saldo em conta)
-  - MySQL (recebíveis - tabela `homeofferscharges`)
+  - MySQL (recebíveis - tabelas `homeoffers` + `homeofferscharges`)
 - **Autenticação Google:** gspread + google-auth (Service Account)
 
 ## Estrutura do Projeto
@@ -19,12 +19,16 @@ Dashboard de fluxo de caixa em tempo real para a Newcore (imobiliária digital b
 ```
 fluxo-caixa-newcore/
 ├── fluxo_caixa_app.py      # Aplicação principal Streamlit
+├── verificar_planilha.py    # Verificação E2E (Sheets + MySQL vs dashboard)
+├── relatorio_email.py       # Relatório diário por email
 ├── requirements.txt         # Dependências
 ├── credentials.json         # Service Account Google (não versionar)
 ├── .env                     # Variáveis de ambiente (não versionar)
 ├── .gitignore
 ├── CLAUDE.md
-└── Spec.md
+├── Spec.md
+├── backend/                 # API FastAPI (React frontend)
+└── frontend/                # Frontend React + Vite
 ```
 
 ## Fontes de Dados
@@ -45,12 +49,20 @@ fluxo-caixa-newcore/
 - `FORNECEDOR` - Nome do fornecedor
 - `CATEGORIA CONSOLIDADA` - Categoria (FOLHA, MIDIA, SISTEMAS, etc.)
 - `VALOR` - Valor em R$
-- `STATUS Consolidado` - Lançado | Previsto | Confirmado | Write off
+- `STATUS Consolidado` - Previsto (pendente) | Lançado (pendente) | Confirmado (pago) | Write off (excluído)
 - `ANO_ORIGINAL`, `MES_ORIGINAL` - Período
 
 ### MySQL (somente leitura)
 
 **Database:** newcore
+
+**Tabela:** `homeoffers` (ofertas)
+
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
+| Id | INT | PK |
+| Audit | TINYINT | 0 = oferta válida, 1 = auditoria |
+| PublishStatus_Id | INT | 30 = publicada |
 
 **Tabela:** `homeofferscharges` (recebíveis/cobranças)
 
@@ -65,22 +77,30 @@ fluxo-caixa-newcore/
 
 **Query padrão recebíveis:**
 ```sql
-SELECT 
-    DATE(ExpiresAt) as data_vencimento,
-    Value as valor,
-    PaidAt as data_pagamento,
-    ChargeStatus as status
-FROM homeofferscharges
-WHERE ExpiresAt >= CURDATE() - INTERVAL 30 DAY
-ORDER BY ExpiresAt
+SELECT
+    DATE(b.ExpiresAt) as data_vencimento,
+    b.Value as valor,
+    b.PaidAt as data_pagamento,
+    b.ChargeStatus as status,
+    b.Offer_Id as oferta_id
+FROM homeoffers a
+INNER JOIN homeofferscharges b ON a.Id = b.Offer_Id
+WHERE a.Audit = 0
+  AND a.PublishStatus_Id = 30
+  AND b.PaidAt IS NULL
+ORDER BY b.ExpiresAt
 ```
 
 ## Regras de Negócio
 
-1. **Despesas a pagar:** `STATUS Consolidado` IN ('Previsto', 'Confirmado')
-2. **Recebíveis pendentes:** `PaidAt IS NULL`
-3. **Saldo projetado:** `Saldo Conta + Recebíveis - Despesas`
-4. **Períodos de análise:** Hoje, 7 dias, 15 dias, 30 dias
+1. **Despesas pendentes:** `STATUS Consolidado` IN ('Previsto', 'Lançado')
+2. **Despesas vencidas:** `STATUS Consolidado` = 'Lançado' AND `DT_PREV_PGTO` < hoje
+3. **Despesas pagas:** `STATUS Consolidado` = 'Confirmado'
+4. **Write off:** Excluído de todos os cálculos
+5. **Orçado:** STATUS IN ('Previsto', 'Lançado') | **Realizado:** STATUS = 'Confirmado'
+6. **Recebíveis pendentes:** `PaidAt IS NULL` + `Audit = 0` + `PublishStatus_Id = 30`
+7. **Saldo projetado:** `Saldo Conta + Recebíveis - Despesas`
+8. **Períodos de análise:** Hoje, 7 dias, 15 dias, 30 dias
 
 ## Configuração
 
@@ -138,8 +158,8 @@ streamlit cache clear
 
 ## Próximas Evoluções (backlog)
 
-- [ ] Relatório diário automatizado (email/WhatsApp)
-- [ ] Orçado vs Realizado por categoria
-- [ ] Alertas de vencimento
-- [ ] Deploy no Streamlit Cloud
+- [x] Relatório diário automatizado (email)
+- [x] Orçado vs Realizado por categoria
+- [x] Alertas de vencimento
+- [x] Deploy no Streamlit Cloud
 - [ ] Autenticação de usuários
