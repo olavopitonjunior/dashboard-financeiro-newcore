@@ -175,14 +175,17 @@ def load_recebiveis_from_mysql():
         try:
             query = """
                 SELECT
-                    DATE(ExpiresAt) as data_vencimento,
-                    Value as valor,
-                    PaidAt as data_pagamento,
-                    ChargeStatus as status,
-                    Offer_Id as oferta_id
-                FROM homeofferscharges
-                WHERE ExpiresAt >= CURDATE() - INTERVAL 90 DAY
-                ORDER BY ExpiresAt
+                    DATE(b.ExpiresAt) as data_vencimento,
+                    b.Value as valor,
+                    b.PaidAt as data_pagamento,
+                    b.ChargeStatus as status,
+                    b.Offer_Id as oferta_id
+                FROM homeoffers a
+                INNER JOIN homeofferscharges b ON a.Id = b.Offer_Id
+                WHERE a.Audit = 0
+                  AND a.PublishStatus_Id = 30
+                  AND b.PaidAt IS NULL
+                ORDER BY b.ExpiresAt
             """
 
             df = pd.read_sql(query, conn)
